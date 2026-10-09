@@ -1,0 +1,361 @@
+window.timerId = null;
+
+// api-endpoint / api-endpoints for <oati-genie-chat-widget>. Kept up here because the
+// handleUserPrompt override below has to recognise the same prompt URL the widget calls.
+const GENIE_API_ENDPOINT = 'http://i-dikshad.dev.oati.local:8000/';
+
+const GENIE_API_ENDPOINTS = {
+    userPrompt: { path: "chat", method: "POST" },
+    groupsList: { path: "conversations/groups", method: "GET" },
+    chatHistoryList: { path: "conversations", method: "GET" },
+    userFeedback: { path: "feedback", method: "POST" },
+    chatHistoryUpdate: { path: "conversations", method: "Patch/DELETE" },
+    chatHistoryDetail: { path: "conversations", method: "GET" },
+
+    //
+    "Genie/Observability/Runs": { path: "", method: "GET" },
+};
+
+// Your own prompt API, e.g. '../MyApp/HandlePrompt'. Empty = not used (step 2 is skipped).
+const MY_PROMPT_API = '';
+
+window.handleUserPrompt = function (request) {
+    const text = (request.prompt || '').trim();
+
+    const channel = (request.metadata && request.metadata.channel && request.metadata.channel.name) || 'OATI';
+
+    // 1. Answer locally. Markdown is rendered; a reply needs at least `response`.
+    if (/^help$/i.test(text)) {
+        return {
+            prompt_id: 'local-' + Date.now(),
+            response:
+                '**Here is what I can help with on ' + channel + ':**\n\n' +
+                '- Outages and their status\n' +
+                '- Capacity and margins\n' +
+                '- Reports and recent activity\n\n' +
+                'Type a question to get started.',
+            references: [],
+            error: null
+        };
+    }
+
+    // 2. Send to your own API and turn its reply into what the widget expects.
+    if (MY_PROMPT_API) {
+        return new Promise(function (resolve, reject) {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', MY_PROMPT_API, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.onload = function () {
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    reject(new Error('My prompt API failed with status ' + xhr.status));
+                    return;
+                }
+                let data;
+                try {
+                    data = JSON.parse(xhr.responseText);
+                } catch (e) {
+                    reject(new Error('My prompt API did not return JSON'));
+                    return;
+                }
+                let answer = data.answer || '';
+                // Show UTC date-times in the user's own time zone, as elsewhere in this file.
+                if (window.visionRoot && visionRoot.handleTimeZoneForDateTime) {
+                    answer = visionRoot.handleTimeZoneForDateTime(answer);
+                }
+                resolve({
+                    prompt_id: data.id || 'my-api-' + Date.now(),
+                    response: answer,
+                    references: [],
+                    error: null
+                });
+            };
+            xhr.onerror = function () { reject(new Error('Could not reach my prompt API')); };
+            xhr.send(JSON.stringify({
+                question: text,
+                conversationId: request.conversation_id,
+                channel: channel
+            }));
+        });
+    }
+
+    // 3. No override: the widget sends the prompt to the Genie server unchanged.
+    // (To change the request first, e.g. request.action = 'Rag', and still use Genie:
+    return window.sendGeniePromptToServer(request);
+    return null;
+};
+
+// Routes the widget's prompt request through window.handleUserPrompt. It patches XMLHttpRequest
+// (api-transport="xhr") and fetch (api-transport="fetch"), but only for a POST to the prompt URL.
+// Every other request passes through untouched, and so does the prompt itself whenever
+// handleUserPrompt returns null/undefined. The pass-through still goes through any XHR
+// interceptor the host app installed, so it keeps the host's auth headers.
+(function installUserPromptOverride() {
+    if (window.__genieUserPromptOverrideInstalled) return;
+    window.__genieUserPromptOverrideInstalled = true;
+
+    function promptUrl() {
+    const path = GENIE_API_ENDPOINTS.userPrompt.path;
+
+    return new URL(
+        path.replace(/^\/+/, ''),
+        new URL(GENIE_API_ENDPOINT, window.location.href)
+    ).href;
+}
+
+function isGenieAPICall(url, method) {
+    return urlPath(url, method) !== null;
+}
+
+    function urlPath(url, method) {
+    try {
+        const target = new URL(url, GENIE_API_ENDPOINT);
+        const base = new URL(GENIE_API_ENDPOINT);
+
+        // Ignore requests to other origins.
+        if (target.origin !== base.origin) {
+            return null;
+        }
+
+        const requestPath = target.pathname.replace(/^\/+|\/+$/g, '');
+        const requestMethod = (method || 'GET').toUpperCase();
+
+        const matches = Object.entries(GENIE_API_ENDPOINTS).filter(
+            function ([key, config]) {
+                const endpointPath =
+                    config.path.replace(/^\/+|\/+$/g, '');
+
+                const methods = config.methods || [config.method];
+
+                return (
+                    requestPath === endpointPath &&
+                    methods.some(function (item) {
+                        return item.toUpperCase() === requestMethod;
+                    })
+                );
+            }
+        );
+
+        if (matches.length === 0) {
+            return null;
+        }
+
+        const [key, config] = matches[0];
+
+        return {
+            url: target.href,
+            endpoint: key,
+            method: requestMethod,
+            pathname: target.pathname,
+            search: target.search,
+            params: target.searchParams,
+            config: config,
+            ambiguous: matches.length > 1
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
+function isPromptRequest(method, url) {
+    const endpoint = urlPath(url, method);
+
+    // Only intercept the chat prompt request.
+    return endpoint !== null &&
+        endpoint.endpoint === 'userPrompt';
+}
+
+    // Runs the override. Resolves to the JSON text to answer with, or null to let the real
+    // request go ahead. Never rejects: a failure becomes the reply's 'error', which the widget
+    // shows as a failed message.
+    function runOverride(body, endPoint) {
+    if (!endPoint || endPoint.endpoint !== "userPrompt") {
+        return Promise.resolve(null);
+    }
+
+    let bodyData;
+
+    try {
+        bodyData = typeof body === "string"
+            ? JSON.parse(body)
+            : body || {};
+    } catch (error) {
+        return Promise.resolve(null);
+    }
+
+    const request = {
+        method: endPoint.method,
+        url: endPoint.url,
+        body: bodyData,
+        prompt: bodyData.message || bodyData.prompt || "",
+        conversation_id:
+            bodyData.thread_id || bodyData.conversation_id || null
+    };
+
+    return Promise.resolve()
+        .then(function () {
+            return window.handleUserPrompt
+                ? window.handleUserPrompt(request)
+                : null;
+        })
+        .then(
+            function (result) {
+                return result == null ? null : JSON.stringify(result);
+            },
+            function (err) {
+                console.error('[genie] handleUserPrompt failed', err);
+
+                return JSON.stringify({
+                    response: '',
+                    references: [],
+                    error: err && err.message
+                        ? err.message
+                        : String(err)
+                });
+            }
+        );
+}
+
+// The host app replaces window.Event, so `new Event()` cannot be relied on there.
+function fire(target, type) {
+    let ev;
+    try {
+        ev = document.createEvent('Event');
+        ev.initEvent(type, false, false);
+    } catch (e) {
+        ev = new Event(type);
+    }
+    target.dispatchEvent(ev);
+}
+
+// --- XMLHttpRequest (api-transport="xhr") ---
+const proto = XMLHttpRequest.prototype;
+const realOpen = proto.open;
+const realSend = proto.send;
+const realAbort = proto.abort;
+
+proto.open = function (method, url) {
+    this.__genieMethod = method;
+    this.__genieUrl = url;
+    this.__genieOverriding = false;
+    this.__genieAborted = false;
+    return realOpen.apply(this, arguments);
+};
+
+proto.send = function (body) {
+    const xhr = this;
+    if (xhr.__genieBypass || !isPromptRequest(xhr.__genieMethod, xhr.__genieUrl)) {
+        return realSend.apply(xhr, arguments);
+    }
+xhr.__genieOverriding = true;
+
+var endPointPath = urlPath(
+    xhr.__genieUrl,
+    xhr.__genieMethod
+);
+
+runOverride(body, endPointPath).then(function (json) {
+        if (xhr.__genieAborted) return;
+        xhr.__genieOverriding = false;
+        if (json === null) {
+            realSend.call(xhr, body); // no override: send the original request
+            return;
+        }
+        // Answer as if the server had replied 200 with this JSON.
+        const fake = { readyState: 4, status: 200, statusText: 'OK', response: json, responseText: json, responseURL: promptUrl() };
+        Object.keys(fake).forEach(function (key) {
+            Object.defineProperty(xhr, key, { configurable: true, get: function () { return fake[key]; } });
+        });
+        fire(xhr, 'readystatechange');
+        fire(xhr, 'load');
+        fire(xhr, 'loadend');
+    });
+};
+
+proto.abort = function () {
+    // The widget aborts a prompt when its tab closes or a newer prompt replaces it.
+    if (this.__genieOverriding) {
+        this.__genieOverriding = false;
+        this.__genieAborted = true;
+        fire(this, 'abort');
+        fire(this, 'loadend');
+        return;
+    }
+    return realAbort.apply(this, arguments);
+};
+
+// For use inside handleUserPrompt: posts `request` to the real Genie prompt endpoint, skipping
+// handleUserPrompt so it cannot loop, and resolves to the server's reply object. The request
+// still goes through the host app's XHR interceptor, so it keeps the auth header.
+window.sendGeniePromptToServer = function (request) {
+    return new Promise(function (resolve, reject) {
+        const xhr = new XMLHttpRequest();
+        const method = request.method;
+        xhr.open(method, request.url, true);
+        xhr.__genieBypass = true;
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.onload = function () {
+            if (xhr.status < 200 || xhr.status >= 300) {
+                reject(new Error('Genie prompt request failed with status ' + xhr.status));
+                return;
+            }
+            try {
+                resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {});
+            } catch (e) {
+                reject(new Error('Genie prompt response was not JSON'));
+            }
+        };
+        xhr.onerror = function () { reject(new Error('Could not reach the Genie prompt endpoint')); };
+        if (method == "POST") {
+            xhr.send(JSON.stringify(request.body));
+        }
+        else {
+            xhr.send();
+        }
+    });
+};
+
+if (window.fetch) {
+    const realFetch = window.fetch;
+
+    window.fetch = function (input, init) {
+        const url = typeof input === 'string'
+            ? input
+            : (input && input.url) || String(input);
+
+        const method = (
+            (init && init.method) ||
+            (input && input.method) ||
+            'GET'
+        ).toUpperCase();
+
+        const body = init && init.body;
+
+        // All endpoints other than POST /chat pass through unchanged.
+        if (
+            !isPromptRequest(method, url) ||
+            typeof body !== 'string'
+        ) {
+            return realFetch.apply(this, arguments);
+        }
+
+        const self = this;
+        const args = arguments;
+        const endpoint = urlPath(url, method);
+
+        return runOverride(body, endpoint).then(function (json) {
+            if (json === null) {
+                return realFetch.apply(self, args);
+            }
+
+            return new Response(json, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+        });
+    };
+}
+})();

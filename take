@@ -1,5 +1,24 @@
-You are a Senior React Developer with expertise in building clean, maintainable, production-ready React applications.
+Task: Convert HTML into a Complete React Project
 
-Convert the provided HTML into a complete React component. First, inspect the sample component/package in abc and follow its existing structure, coding conventions, and implementation patterns. Identify whether it uses .jsx or .tsx and create the component using the same file type, folder structure, imports, exports, styling approach, and supporting files.
+HTML_SOURCE_PATH = "path/to/index.html"
+DEMO_REACT_PATH  = "path/to/demo-react/"
+OUTPUT_PATH      = "path/to/output/"
 
-Preserve the original HTML design, layout, responsiveness, and functionality. Reuse existing components and dependencies wherever possible. Create all required files in the appropriate locations and ensure the implementation integrates correctly with the existing project without unnecessary changes.
+
+Read and analyze DEMO_REACT_PATH thoroughly. Convert the HTML file at HTML_SOURCE_PATH into a complete React project that follows the demo's existing architecture, file formats, coding style, dependencies, and conventions.
+
+Convert the actual HTML into native, reusable React components. Create separate components for appropriate sections, headers, footers, forms, popups, modals, buttons, and other elements. Preserve all original HTML content, CSS, layouts, colors, fonts, images, assets, responsive behavior, animations, and supported JavaScript interactions.
+
+Extract and organize CSS into appropriate files. Recreate all popups, forms, buttons, and interactions using functional React components and state management. Resolve all asset paths and preserve the original design as closely as possible.
+
+Strict requirements:
+
+Do not use an iframe.
+Do not inject or render the HTML string using dangerouslySetInnerHTML.
+Do not simply wrap the original HTML inside React.
+Rebuild all HTML elements as actual React components.
+Follow the reference demo's file formats and project conventions.
+Convert only the specified HTML file, not the entire website.
+Do not modify the source HTML or reference demo.
+
+Save the complete working project to OUTPUT_PATH, including all React components, CSS, assets, and configuration files. Run the project, fix errors, and verify that the rendered React page visually and functionally matches the original HTML as closely as possible.

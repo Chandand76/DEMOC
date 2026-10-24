@@ -1,24 +1,19 @@
-Task: Convert HTML into a Complete React Project
+Analyze the provided HTML file and generate a comprehensive IMPLEMENTATION_SPEC.md documenting every single HTML element, UI component, style, asset, and functionality without skipping anything.
 
-HTML_SOURCE_PATH = "path/to/index.html"
-DEMO_REACT_PATH  = "path/to/demo-react/"
-OUTPUT_PATH      = "path/to/output/"
+Inspect the complete DOM, HTML, CSS, JavaScript, and available assets. Include every element, including nested and hidden components, headers, footers, navigation, containers, buttons, links, forms, inputs, labels, icons, images, SVGs, tables, dropdowns, modals, tooltips, animations, event handlers, state changes, API calls, responsive layouts, and all other components present in the source.
+
+Document exact styling, dimensions, colors, typography, spacing, positioning, component hierarchy, content, interactions, validation, dependencies, and behavior. Preserve the original design and functionality precisely. Identify every component and its relationships, including dynamically generated elements and conditional states. Do not summarize, simplify, omit, or invent anything. Mark inaccessible or unverifiable details explicitly.
+
+Final deliverable: A detailed, self-contained IMPLEMENTATION_SPEC.md that enables complete reconstruction of the original HTML page as a visually accurate, responsive, fully functional React application, with every source component accounted for. Include a component-by-component verification checklist to ensure nothing is missed.
 
 
-Read and analyze DEMO_REACT_PATH thoroughly. Convert the HTML file at HTML_SOURCE_PATH into a complete React project that follows the demo's existing architecture, file formats, coding style, dependencies, and conventions.
 
-Convert the actual HTML into native, reusable React components. Create separate components for appropriate sections, headers, footers, forms, popups, modals, buttons, and other elements. Preserve all original HTML content, CSS, layouts, colors, fonts, images, assets, responsive behavior, animations, and supported JavaScript interactions.
+react - PROMPT 
 
-Extract and organize CSS into appropriate files. Recreate all popups, forms, buttons, and interactions using functional React components and state management. Resolve all asset paths and preserve the original design as closely as possible.
+Create a complete React package that mirrors the existing package located at [ORIGINAL_PACKAGE_PATH]. Reproduce the entire package as faithfully as possible, preserving every component, HTML element, UI layout, style, asset, functionality, interaction, route, dependency, and configuration.
 
-Strict requirements:
+Use IMPLEMENTATION_SPEC.md as the reference specification. Inspect the original package's source code and structure, then recreate all files and folders in a separate mirror package at [MIRROR_PACKAGE_PATH].
 
-Do not use an iframe.
-Do not inject or render the HTML string using dangerouslySetInnerHTML.
-Do not simply wrap the original HTML inside React.
-Rebuild all HTML elements as actual React components.
-Follow the reference demo's file formats and project conventions.
-Convert only the specified HTML file, not the entire website.
-Do not modify the source HTML or reference demo.
+Do not skip, simplify, redesign, or remove any functionality. Preserve the original visual appearance, responsive behavior, component hierarchy, state management, API integrations, and error handling. Ensure all imports, assets, and dependencies work correctly.
 
-Save the complete working project to OUTPUT_PATH, including all React components, CSS, assets, and configuration files. Run the project, fix errors, and verify that the rendered React page visually and functionally matches the original HTML as closely as possible.
+After implementation, run the available build and tests, fix errors, and verify that the mirror package behaves and looks like the original. Keep the original package unchanged. Report the mirror package path and any remaining issues.
